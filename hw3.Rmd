@@ -1,0 +1,242 @@
+---
+title: "HW 3"
+author: "Christina Pham"
+date: "2024-11-03"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r Loading datasets}
+library(tidyverse)
+library(tidymodels)
+library(ggplot2)
+library(corrplot)
+library(discrim)
+titanic <- read_csv("homework-3-/homework-3-/data/titanic.csv")
+titanic <- mutate(titanic, survived = factor(survived, 
+                           levels = c("Yes", "No")),
+         pclass = as.factor(pclass))
+        
+```
+### Question 1
+```{r Question 1}
+set.seed(1178)
+titanic_split <- titanic %>%
+  initial_split(prop = 0.75, strata = survived)
+
+titanic_train <- training(titanic_split) # 667
+titanic_test <- testing(titanic_split) #224
+dim(titanic_train)
+dim(titanic_test)
+
+titanic_train %>%
+  group_by(survived) %>%
+  summarize(count = n()) #See output
+
+#Missing data
+colSums(is.na(titanic_train))  #counts the number of missing values(644)
+
+```
+
+### Observation
+Each dataset has approximately the correct number of observations, with 75% 
+of the dataset (891 observations) being training (667), and the rest (224) being testing.
+
+Out of our 667 observations in our training data, the variables with NA values is age with about 130 missing observations, cabin with 513 missing observations, and embarked with 1 missing observation. 
+
+It is a good idea to use stratified sampling for this data since the output is
+not balanced, with more frequent observations for "No" (411) than "Yes" (256).
+
+### Question 2
+```{r Question 2}
+#Bar Chart
+titanic_train %>%
+  ggplot(aes(x = survived)) +
+  geom_bar()
+```
+
+Based on the bar chart, we see there are more observations in "No" than "Yes".
+
+```{r Percent Bar Chart - survived}
+titanic_train %>%
+  ggplot(aes(x = survived, fill = sex)) +
+  geom_bar(position = "fill")
+```
+
+Yes, `sex` is a good predictor for the outcome `survived`, with a higher amount of females surviving compared to males.
+
+```{r}
+titanic_train %>%
+  ggplot(aes(x = survived, fill = pclass)) +
+  geom_bar(position = "fill")
+```
+
+Yes, `pclass` is a good predictor of the outcome 'survived'. We see that a higher percentage of third-class passengers did not survive compared to first and second-class. 
+
+It might be more useful to use a percent stacked bar chart as opposed to a traditional stacked bar chart since using proportions/percentages instead of total counts makes it easier to compare the relative survival rates within each category/level. It also lets us see the differences in the proportions of survivors vs. non-survivors within each separate category/level. 
+
+### Question 3
+```{r Question 3}
+titanic_train %>% 
+select(where(is.numeric), -passenger_id) %>% 
+  cor(use = "complete.obs") %>%
+  corrplot(type = "lower", diag = FALSE,
+           method = 'color', addCoef.col = 'black')
+  
+```
+
+From the correlation matrix, we see `sib_sp` and `age` are negatively correlated with a coefficient of -0.3. This makes sense since as age increases, the older passenger on board the titanic is less likely to have siblings/their spouse aboard the Titanic. `Parch` and `age` also are negatively correlated with a coefficient of -0.19. This implies that older passengers are less likely to have their parents/children aboard the Titanic. Note that `parch` and `sib_sp` have the highest correlation coefficient & are positively correlated (0.38) which implies that the more parents aboard, the more siblings/spouses that are also aboard the Titanic. However, it is important to notice that `parch` and `sib_sp` are discrete variables.
+
+### Question 4
+```{r Question 4}
+titanic_recipe <- recipe(survived ~ pclass + sex + age + sib_sp + parch + fare, data = titanic_train) %>%
+  step_impute_linear(age, impute_with = imp_vars(sib_sp)) %>% #impute with sib_sp
+  step_dummy(all_nominal_predictors()) %>%
+  step_interact(~starts_with("sex"):fare + age:fare)
+```
+
+### Question 5
+```{r Question 5}
+titanic_logreg <- logistic_reg() %>%
+  set_engine("glm") %>%
+  set_mode("classification")
+
+titanic_workflow <- workflow() %>%
+  add_model(titanic_logreg) %>%
+  add_recipe(titanic_recipe)
+
+survived_fit1 <- fit(titanic_workflow, data = titanic_train)
+
+```
+
+### Question 6
+```{r Question 6}
+titanic_lda <- discrim_linear() %>%
+  set_engine("MASS") %>% 
+  set_mode("classification")
+
+titanic_workflow2 <- workflow() %>%
+  add_model(titanic_lda) %>%
+  add_recipe(titanic_recipe)
+
+survived_lda <- fit(titanic_workflow2, data = titanic_train)
+```
+
+### Question 7 
+```{r Question 7}
+titanic_qda <- discrim_quad() %>%
+  set_engine("MASS") %>%
+  set_mode("classification")
+
+titanic_workflow3 <- workflow() %>%
+  add_model(titanic_qda) %>%
+  add_recipe(titanic_recipe)
+
+survived_qda <- fit(titanic_workflow3, data = titanic_train)
+```
+
+### Question 8 
+```{r Question 8} 
+titanic_knn <- nearest_neighbor(neighbors =5) %>% #k = 5
+  set_engine("kknn") %>%
+  set_mode("classification")
+
+titanic_workflow4 <- workflow() %>%
+  add_model(titanic_knn) %>%
+  add_recipe(titanic_recipe)
+
+survived_knn <- fit(titanic_workflow4, data = titanic_train)
+
+```
+
+### Question 9 
+```{r Question 9}
+predict(survived_fit1, new_data =  titanic_train, type = "prob") #Logistic
+predict(survived_lda, new_data = titanic_train, type = "prob") #LDA
+predict(survived_qda, new_data = titanic_train, type = "prob") #QDA
+predict(survived_knn, new_data = titanic_train, type = "prob") #knn
+
+#Use augment (similar to Hw2)
+log_reg_roc <- augment(survived_fit1, new_data = titanic_train) %>%
+  roc_auc(survived, .pred_Yes)
+lda_roc <- augment(survived_lda, new_data = titanic_train) %>%
+  roc_auc(survived, .pred_Yes)
+qda_roc <- augment(survived_qda, new_data = titanic_train) %>%
+  roc_auc(survived, .pred_Yes)
+knn_roc <- augment(survived_knn, new_data = titanic_train) %>%
+  roc_auc(survived, .pred_Yes)
+
+all_roc <- bind_rows(log_reg_roc, lda_roc, qda_roc, knn_roc) 
+
+all_roc <- all_roc %>%
+  data.frame() %>%
+  mutate(models = c("Log", "LDA", "QDA", "KNN"))
+
+all_roc
+```
+
+Based on our model performances, our KNN model performs the best with k = 5 under the ROC curve. We get an estimate of 0.986. However, this high accuracy may be due to overfitting. Meanwhile, logistic regression, LDA, and QDA perform similarly on the training data as these models.
+
+### Question 10 
+```{r Question 10}
+predict(survived_fit1, new_data =  titanic_test, type = "prob") #Logistic
+predict(survived_lda, new_data = titanic_test, type = "prob") #LDA
+predict(survived_qda, new_data = titanic_test, type = "prob") #QDA
+predict(survived_knn, new_data = titanic_test, type = "prob") #knn
+
+log_reg_roctest <- augment(survived_fit1, new_data = titanic_test) %>%
+  roc_auc(survived, .pred_Yes)
+lda_roctest <- augment(survived_lda, new_data = titanic_test) %>%
+  roc_auc(survived, .pred_Yes)
+qda_roctest <- augment(survived_qda, new_data = titanic_test) %>%
+  roc_auc(survived, .pred_Yes)
+knn_roctest <- augment(survived_knn, new_data = titanic_test) %>%
+  roc_auc(survived, .pred_Yes)
+
+all_roctest <- bind_rows(log_reg_roctest, lda_roctest, qda_roctest, knn_roctest) 
+
+all_roctest <- all_roctest %>%
+  data.frame() %>%
+  mutate(models = c("Log", "LDA", "QDA", "KNN"))
+
+all_roctest
+
+```
+
+Based on the model performances, KNN achieved the highest AUC on the testing data (0.84).
+
+### KNN model 
+```{r}
+#Confusion matrix
+augment(survived_knn, new_data = titanic_test) %>%
+  conf_mat(truth = survived, estimate = .pred_class)
+
+#Confusion matrix visualization
+augment(survived_knn, new_data = titanic_test) %>%
+  conf_mat(truth = survived, estimate = .pred_class) %>%
+  autoplot(type = "heatmap")
+
+#ROC Curve plot
+augment(survived_knn, new_data = titanic_test) %>%
+  roc_curve(survived, .pred_Yes) %>%
+  autoplot()
+```
+
+From our best model's (KNN) performance, we see that the testing AUC was about 14% lower than our training AUC. Despite the differences, the model still performed quite well, with a testing AUC of 0.84 and training AUC of 0.98 which is quite high. With the gap between the two AUCs, it is safe to assume that when we applied our KNN model, the high AUC may be due to overfitting our model. Apart from the KNN model, the other three models performed similarly as well with a testing AUC around 0.82, which is only a small decrease of 0.02 from the training AUC.
+
+### Question 11
+
+$$p(z)=\frac{e^z}{1+e^z}$$
+$$p(1+{e^z}) = {e^z}$$ 
+$$p + p{e^z} = {e^z}$$
+$$p = {e^z}- p({e^z)}$$
+$$p = {e^z}(1-p)$$
+$$\frac{p}{1-p} = {e^z}$$
+$$ln(\frac{p}{1-p}) = z$$
+
+

@@ -1,0 +1,142 @@
+---
+title: "HW2"
+author: "Christina Pham"
+date: "2024-10-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+### Loading Packages
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(ggplot2)
+abalone <- read_csv("homework-2/homework-2/data/abalone.csv")
+```
+
+### Question 1
+```{r}
+abalone <- abalone %>%
+  mutate(age = rings + 1.5)
+
+#Distribution of age
+abalone %>%
+  ggplot(aes(x = age)) +
+  geom_histogram(binwidth = 2, color = "black", fill = "blue")
+
+
+```
+
+Based on the histogram, age seems to be normally distributed and is slightly right-skewed. We also see
+most abalones are around the age of 7 to 14 years old, and some outliers with ages 25 and above.
+
+### Question 2
+```{r}
+set.seed(1178)
+abalone_split <- initial_split(abalone, prop = 0.75, strata = age) #split data into training and testing
+abalone_train <- training(abalone_split) # training set
+abalone_test <- testing(abalone_split) # testing set
+``` 
+
+### Question 3 
+
+```{r}
+abalonerecipe <- recipe (age ~ . , data = abalone_train) %>%
+  step_rm(rings) %>% # remove rings from predictors
+  step_dummy(all_nominal_predictors()) %>% #dummy code categorical variables
+  step_interact(terms = ~ starts_with("type"):shucked_weight + # interactions
+                          longest_shell:diameter +
+                          shucked_weight:shell_weight) %>%
+  step_normalize(all_predictors()) # center and scale
+```
+
+We do not include rings to predict age since age is derived using rings (age = rings + 1.5) and will
+result in data leakage and prevent the model from discovering patterns from other variables within the
+dataset. It may also lead to overfitting.
+
+### Question 4 
+```{r}
+lr_mod<- linear_reg() %>%
+  set_engine("lm") %>%
+  set_mode("regression")
+```
+
+### Question 5
+```{r}
+knn_mod <- nearest_neighbor(neighbors = 7) %>% #k = 7
+  set_engine("kknn") %>%
+  set_mode("regression")
+
+```
+
+### Question 6 
+```{r}
+#Set up linear regression workflow
+linear_workflow <- workflow() %>%
+  add_model(lr_mod) %>%
+  add_recipe(abalonerecipe)
+
+linear_fit <- fit(linear_workflow, abalone_train) #fit linear model on training data
+
+#Set up KNN workflow 
+knn_workflow <- workflow() %>%
+  add_recipe(abalonerecipe) %>%
+  add_model(knn_mod) 
+
+knn_fit <- fit(knn_workflow, abalone_train) #fit knn model on training data 
+
+```
+
+### Question 7 
+```{r}
+abalone1 <- tibble(type = "F", 
+                   longest_shell = 0.50, 
+                   diameter = 0.10, 
+                   height = 0.30,
+                   whole_weight = 4, 
+                   shucked_weight = 1,
+                   viscera_weight = 2, 
+                   shell_weight = 1,
+                   rings = 0)
+predicted_age <- predict(linear_fit, new_data = abalone1)
+print(predicted_age)
+```
+
+The expected predicted age of this female abalone is 23.16 years. 
+
+### Question 8 
+```{r}
+library(yardstick)
+
+metrics <- metric_set(rmse, rsq, mae) #Create metric set that includes R^2, RMSE, and MAE
+
+aug_model <- augment(linear_fit, new_data = abalone_test) #Use augment()
+
+lm_metrics <- metrics(aug_model, truth = age, estimate = .pred)
+
+print(lm_metrics)
+
+```
+
+For our results, our RMSE is 2.071, $R^2$ is 0.5724, and MAE is 1.4958. The $R^2$ value is low, with only about $57\%$ of the variance of abalone age being explained in the model.
+
+```{r}
+aug_modelknn <- augment(knn_fit, new_data = abalone_test)
+
+KNN_metrics <- metrics(aug_modelknn, truth = age, estimate = .pred)
+
+print(KNN_metrics)
+```
+
+For our results, we have a RMSE of 2.341, a $R^2$ of 0.4645, and MAE of 1.661. Notice that the
+$R^2$ is lower for the KNN model on the testing set.
+
+### Question 9 
+Based on our results, our linear model performed slightly better than our KNN model even though
+both models did not relatively perform well in predicting new data. Linear regression performed better
+on the testing data likely because the relationship between some abalone features and age contain some linearity which the KNN model failed to capture effectively. It is most likely that the KNN model may have been
+outperfomed due to noise and that k = 7 may not have been the optimal choice for this model. 
+I'm not surprised with the results since the features are continuous and could have linear relationships with age, therefore performing better.

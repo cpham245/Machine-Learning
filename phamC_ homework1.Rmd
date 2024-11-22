@@ -1,0 +1,109 @@
+---
+title: "PhamC_homework1"
+author: "Christina Pham"
+date: "2024-10-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Question 1: 
+Supervised and unsupervised learning are both types of machine learning models. In
+supervised learning, the dataset includes both the input data and the 
+actual expected values of the outcome.These values are used to supervise
+and assess the quality of our predictions/estimations.
+In unsupervised learning, machine learning algorithms work with unlabeled data observations, thus uncovering hidden relationships and patterns in the underlying data.
+
+### Question 2: 
+In machine learning, regression models handle quantitative data and predict continuous outcomes whereas classification models deal with qualitative data, predicting categorical values.
+
+### Question 3: 
+Two commonly used metrics for regression ML problems are the root mean squared error and R-squared. Two commonly used metrics for classification ML problems are the error rate and area under ROC curve.
+
+### Question 4: 
+Descriptive models are used to best visually emphasize a trend in data such as
+using a line on a scatterplot (from lecture 1).
+
+Inferential models are used to discover significant features in the data set with the aim to test theories. They are also used to make causal claims of the relationship between the outcome & predictor(s) (from lecture 1).
+
+Predictive models are used to predict which combo of features fit best with the aim to predict the outcome (Y) as accurately as possible with minimum reducible error (from lecture 1).
+
+### Question 5
+The first question is predictive as it focuses on the outcome (support of the
+candidate) based on the voter's profile.
+The second question is inferential since it focuses on determining the 
+specific causal relationship between the predictor (candidate personal contact) and the outcome (voter behavior).
+
+## Exploratory Data Analysis
+```{r load packages, echo = FALSE}
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+```
+### Exercise 1
+```{r histogram, echo = FALSE}
+mpg %>%
+  ggplot(aes(x=hwy))+ 
+  geom_histogram(binwidth = 2, fill = "grey", color = "white")+
+  labs(title = "Hwy Miles per Gallon Histogram", x = "Highway MPG", y = "Frequency")
+```
+
+Based on the histogram, the distribution of the highway mpg seems to be positively skewed, with most clusters occurring between 15mpg to 20mpg and 25mpg to 30mpg. There are two peaks in the histogram, one at 16mpg, and the other at 26 mpg. We also see that there are fewer cars that achieve high mpg (40-45 mpg).
+
+### Exercise 2
+```{r scatterplot, echo = FALSE}
+mpg %>% 
+  ggplot(aes(x = hwy, y = cty)) + 
+  geom_point() + 
+  labs(title = "Highway MPG vs City MPG Scatterplot", x = "City MPG", y= "Highway   MPG") +
+  geom_jitter() 
+```
+
+Based on the scatterplot above, it looks like the data falls along a rough linear line, meaning there is a positive correlation between hwy and cty(city miles per gallon). As hwy increases, cty increases as well, therefore vehicles with high mpg on highways also tend to have high mpg in cities.The scatterplot also seems to be a case of overplotting but can be fixed by using jitter.
+
+### Exercise 3 
+```{r bar plot, echo = FALSE}
+#Rearrange data in order
+manufacturer_count <- mpg %>%
+  count(manufacturer) %>%
+  arrange(desc(n))
+
+mpg$manufacturer <- factor(mpg$manufacturer, levels = manufacturer_count$manufacturer)
+
+##Create bar plot of manufacturer (ordered)
+mpg %>%
+  ggplot(aes(x = manufacturer))+
+  geom_bar() +
+  coord_flip() +
+  labs( title = "Manufacturer Bar Plot", x = "Frequency", y = "Manufacturer")
+```
+
+Based on the bar plot, we see that Dodge produced the most number of cars (38) whereas Lincoln produced the lowest number of cars (about 5).
+
+### Exercise 4
+```{r, echo = FALSE}
+mpg %>% 
+  ggplot(aes(x = hwy, y = factor(cyl))) +
+  geom_boxplot() +
+  geom_jitter(alpha = 0.3) +
+  labs(x = "Highway MPG", y = "Cylinders")
+```
+
+Based on the box plot of 'hwy' grouped by 'cyl', we see that cars with more cylinders have lower highway MPG whereas cars with less cylinders have higher highway MPG. In addition, cars with four cylinders have the greatest highway MPG,
+and we also notice there are not many cars with five cylinders. 
+
+```{r, echo = FALSE}
+mpg %>% 
+  select(is.numeric) %>% #selects columns that are only numeric
+  cor() %>% 
+  corrplot(type = 'lower', diag = FALSE, 
+           method = 'color')
+```
+
+From the corrplot, highway MPG and city MPG are positively correlated and the number of cylinders and engine displacement are positively correlated. This makes sense since fuel-efficient cars use less gas on either city roads or the highway and the more cylinders a car has, the more displacement it has. 
+
+On the other hand, city MPG and engine displacement are negatively correlated, highway MPG and engine displacement are negatively correlated, city MPG and the number of cylinders are negatively correlated, and highway MPG and the number of cylinders are negatively correlated. This makes sense since cars that have greater engine displacement require more fuel than smaller ones, resulting in lower city MPG and lower highway MPG. Moreover, the more cylinders a car has, the more fuel it consumes, resulting in lower city and lower highway MPG.
+
+It was suprising see that city and hwy mileage go hand in hand as they are positively correlated. For eaxmple, if city MPG and engine displacement are negatively correlated, then the same correlation relationship goes for highway MPG and engine displacement.
